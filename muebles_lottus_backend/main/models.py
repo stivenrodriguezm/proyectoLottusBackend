@@ -138,3 +138,9 @@ class Remision(models.Model):
     def __str__(self):
         return f"Remisión {self.id}"
 
+
+class ProductoFactura(models.Model):
+    factura = models.ForeignKey(FacturaProveedor, on_delete=models.CASCADE, related_name='factura_productos')
+    inventario = models.ForeignKey(Inventario, on_delete=models.CASCADE)
+    cantidad = models.IntegerField()
+    descripcion = models.TextField()

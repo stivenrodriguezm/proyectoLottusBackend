@@ -103,3 +103,5 @@ class FacturaProveedorViewSet(viewsets.ModelViewSet):
 class RemisionViewSet(viewsets.ModelViewSet):
     queryset = Remision.objects.all()
     serializer_class = RemisionSerializer
+
+    

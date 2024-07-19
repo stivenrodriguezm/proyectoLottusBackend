@@ -1,7 +1,7 @@
 # main/serializers.py
 
 from rest_framework import serializers
-from .models import Cliente, Categoria, Inventario, OrdenCompra, OrdenPedido, Producto, Proveedor, Vendedor, ProductoOrdenPedido, FacturaProveedor, Remision
+from .models import Cliente,ProductoFactura, Categoria, Inventario, OrdenCompra, OrdenPedido, Producto, Proveedor, Vendedor, ProductoOrdenPedido, FacturaProveedor, Remision
 
 class ClienteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -96,8 +96,15 @@ class VendedorSerializer(serializers.ModelSerializer):
             'correo': {'validators': []},  # Asegurarse de que no haya validadores adicionales que puedan estar causando el problema
         }
 
+class ProductoFacturaSerializer(serializers.ModelSerializer):
+    inventario = InventarioSerializer()
+
+    class Meta:
+        model = ProductoFactura
+        fields = ['id', 'inventario', 'cantidad', 'descripcion']
+
 class FacturaProveedorSerializer(serializers.ModelSerializer):
-    productos = InventarioSerializer(many=True)
+    productos = ProductoFacturaSerializer(many=True)
 
     class Meta:
         model = FacturaProveedor
@@ -107,8 +114,38 @@ class FacturaProveedorSerializer(serializers.ModelSerializer):
         productos_data = validated_data.pop('productos')
         factura = FacturaProveedor.objects.create(**validated_data)
         for producto_data in productos_data:
-            Inventario.objects.create(factura=factura, **producto_data)
+            inventario_data = producto_data.pop('inventario')
+            inventario, created = Inventario.objects.get_or_create(**inventario_data)
+            ProductoFactura.objects.create(factura=factura, inventario=inventario, **producto_data)
         return factura
+
+    def update(self, instance, validated_data):
+        productos_data = validated_data.pop('productos')
+        instance = super().update(instance, validated_data)
+
+        keep_productos = []
+        for producto_data in productos_data:
+            inventario_data = producto_data.pop('inventario')
+            inventario, created = Inventario.objects.get_or_create(**inventario_data)
+            if 'id' in producto_data.keys():
+                if ProductoFactura.objects.filter(id=producto_data['id']).exists():
+                    p = ProductoFactura.objects.get(id=producto_data['id'])
+                    p.inventario = inventario
+                    p.cantidad = producto_data.get('cantidad', p.cantidad)
+                    p.descripcion = producto_data.get('descripcion', p.descripcion)
+                    p.save()
+                    keep_productos.append(p.id)
+                else:
+                    continue
+            else:
+                p = ProductoFactura.objects.create(factura=instance, inventario=inventario, **producto_data)
+                keep_productos.append(p.id)
+
+        for producto in instance.factura_productos.all():
+            if producto.id not in keep_productos:
+                producto.delete()
+
+        return instance
     
 class RemisionSerializer(serializers.ModelSerializer):
     productos = InventarioSerializer(many=True)
@@ -123,3 +160,5 @@ class RemisionSerializer(serializers.ModelSerializer):
         for producto_data in productos_data:
             Inventario.objects.create(remision=remision, **producto_data)
         return remision
+    
+
